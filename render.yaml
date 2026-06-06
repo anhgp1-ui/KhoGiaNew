@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: khogia
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run Webtracuu_V3.py --server.port $PORT --server.address 0.0.0.0
