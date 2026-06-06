@@ -3,6 +3,37 @@ import pandas as pd
 import sqlite3
 import os
 import gdown
+import unicodedata
+
+
+# ==========================
+# TEXT NORMALIZE
+# ==========================
+
+def normalize_text(text):
+
+    if text is None:
+        return ""
+
+    text = str(text).lower()
+
+    text = unicodedata.normalize(
+        "NFD",
+        text
+    )
+
+    text = "".join(
+        c
+        for c in text
+        if unicodedata.category(c) != "Mn"
+    )
+
+    text = text.replace(
+        "đ",
+        "d"
+    )
+
+    return text
 
 # ==========================
 # CONFIG
@@ -118,7 +149,7 @@ def format_money(df):
 
     return df
 
-
+@st.cache_data(ttl=3600)
 def get_count(table_name):
 
     sql = f"""
@@ -132,6 +163,7 @@ def get_count(table_name):
     )["total"][0]
 
 
+@st.cache_data(ttl=3600)
 def get_hang_xe_phutung():
 
     sql = """
@@ -145,7 +177,7 @@ def get_hang_xe_phutung():
         conn
     )["Hãng xe"].tolist()
 
-
+@st.cache_data(ttl=3600)
 def get_hang_xe_son():
 
     sql = """
@@ -159,7 +191,7 @@ def get_hang_xe_son():
         conn
     )["Hãng xe"].tolist()
 
-
+@st.cache_data(ttl=3600)
 def get_namsx():
 
     sql = """
@@ -175,7 +207,7 @@ def get_namsx():
 
     return df["Năm SX"].tolist()
 
-
+@st.cache_data(ttl=3600)
 def get_tinh():
 
     sql = """
@@ -439,7 +471,7 @@ with tab_pt:
     if ten_pt:
 
         sql += """
-        AND [Tên phụ tùng]
+        AND [Tên phụ tùng chuẩn]
         LIKE ?
         """
 
@@ -711,7 +743,7 @@ with tab_son:
     if hang_muc:
 
         sql += """
-        AND [Hạng mục] LIKE ?
+        AND [Hạng mục chuẩn] LIKE ?
         """
 
         params.append(
