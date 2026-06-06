@@ -129,7 +129,7 @@ if not st.session_state.logged_in:
                 "Sai tài khoản hoặc mật khẩu"
             )
 
-    st.stop()
+            st.stop()
 
 DB_FILE = "kho_gia.db"
 
