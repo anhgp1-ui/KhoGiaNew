@@ -9,16 +9,75 @@ import gdown
 # ==========================
 
 st.set_page_config(
-    page_title="Tra cứu kho giá V3",
+    page_title="Tra cứu kho giá V4",
     layout="wide"
 )
+USERS = {
+    "Admin": "@Tasco2026",
+    "COC01": "@Tasco123"
+}
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+
+    col1, col2, col3 = st.columns([1,2,1])
+
+    with col2:
+        st.image(
+            "assets/logo_tasco.png",
+            width=250
+        )
+
+    st.markdown(
+        """
+        <h1 style='text-align:center;color:#00B7B5'>
+        TASCO INSURANCE
+        </h1>
+        """,
+        unsafe_allow_html=True
+    )
+
+    username = st.text_input(
+        "Tài khoản"
+    )
+
+    password = st.text_input(
+        "Mật khẩu",
+        type="password"
+    )
+
+    if st.button("Đăng nhập"):
+
+        if (
+            username in USERS
+            and
+            USERS[username] == password
+        ):
+
+            st.session_state.logged_in = True
+            st.session_state.user = username
+            st.rerun()
+
+        else:
+
+            st.error(
+                "Sai tài khoản hoặc mật khẩu"
+            )
+
+    st.stop()
 
 DB_FILE = "kho_gia.db"
 
 if not os.path.exists(DB_FILE):
     file_id = "14cyPLU-td2vvmm0Jkm6Hy01vDdHS_loB"
     url = f"https://drive.google.com/uc?id={file_id}"
-    gdown.download(url, DB_FILE, quiet=False)
+    gdown.download(
+    id=file_id,
+    output=DB_FILE,
+    quiet=False
+)
 
 # ==========================
 # SQLITE
@@ -136,6 +195,11 @@ def get_tinh():
 
 st.sidebar.title("📊 KHO GIÁ")
 
+st.sidebar.image(
+    "assets/logo_tasco.png",
+    width=180
+)
+
 pt_master_count = get_count(
     "phutung_master"
 )
@@ -152,31 +216,79 @@ son_raw_count = get_count(
     "son_raw"
 )
 
-st.sidebar.info(
-    f"""
-🔧 PT Master: {pt_master_count:,}
-
-📋 PT Raw: {pt_raw_count:,}
-
-🎨 Sơn Master: {son_master_count:,}
-
-📋 Sơn Raw: {son_raw_count:,}
-"""
+st.sidebar.markdown(
+    """
+    ## 📊 THỐNG KÊ
+    """
 )
 
+c1, c2 = st.sidebar.columns(2)
+
+c1.metric(
+    "PT",
+    f"{pt_master_count:,}"
+)
+
+c2.metric(
+    "HSBT PT",
+    f"{pt_raw_count:,}"
+)
+
+c1.metric(
+    "Sơn",
+    f"{son_master_count:,}"
+)
+
+c2.metric(
+    "HSBT Sơn",
+    f"{son_raw_count:,}"
+)
 if st.sidebar.button(
-    "🔄 Refresh Database"
+    "🚪 Đăng xuất"
 ):
-    st.cache_data.clear()
-    st.cache_resource.clear()
+
+    st.session_state.clear()
+
     st.rerun()
 
 # ==========================
 # HEADER
 # ==========================
 
-st.title(
-    "🔍 TRA CỨU KHO GIÁ V3"
+col1, col2 = st.columns([1,4])
+
+with col1:
+    st.image(
+        "assets/logo_tasco.png",
+        width=140
+    )
+
+with col2:
+
+    st.markdown(
+        """
+        <h1 style='color:#00B7B5'>
+        TRA CỨU GIÁ TASCO
+        </h1>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        """
+        <span style='color:#F58220'>
+        Phụ tùng • Sơn • HSBT
+        </span>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.caption(
+    f"Xin chào {st.session_state.get('user','Guest')}"
+    )
+
+st.info(
+    "🚗 Kho giá nội bộ Tasco Insurance - Version 4.0"
 )
 
 tab_pt, tab_son = st.tabs(
@@ -751,3 +863,15 @@ with tab_son:
             use_container_width=True,
             height=350
         )
+st.markdown("---")
+
+st.markdown(
+    """
+    <div style='text-align:center;color:gray'>
+    Tasco Insurance<br>
+    Kho giá nội bộ<br>
+    Version 4.0
+    </div>
+    """,
+    unsafe_allow_html=True
+)
