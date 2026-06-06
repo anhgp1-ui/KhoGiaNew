@@ -11,6 +11,7 @@ import unicodedata
 # ==========================
 
 def normalize_text(text):
+    
 
     if text is None:
         return ""
@@ -34,6 +35,37 @@ def normalize_text(text):
     )
 
     return text
+
+def get_model_group(text):
+
+    if text is None:
+        return ""
+
+    text = str(text).upper()
+
+    text = text.replace("-", "")
+    text = text.replace("_", "")
+    text = text.strip()
+
+    parts = text.split()
+
+    if not parts:
+        return ""
+
+    return parts[0]
+
+def expand_model_group(group_name, all_models):
+
+    result = []
+
+    group_name = get_model_group(group_name)
+
+    for model in all_models:
+
+        if get_model_group(model) == group_name:
+            result.append(model)
+
+    return result
 
 # ==========================
 # CONFIG
@@ -371,7 +403,7 @@ with tab_pt:
         dong_xe_options = sorted(
             list(
                 {
-                    str(x).split()[0].upper()
+                    get_model_group(x)
                     for x in dong_xe_raw["Dòng xe"]
                     if pd.notna(x)
                 }
@@ -387,21 +419,20 @@ with tab_pt:
     # Năm SX
     # ------------------
 
-    nam_sx = st.selectbox(
-        "Năm SX",
-        [""] + [str(x) for x in get_namsx()]
+    nam_sx_list = st.multiselect(
+    "Năm SX",
+    [str(x) for x in get_namsx()]
     )
 
     # ------------------
     # Loại giá
     # ------------------
 
-    loai_gia = st.selectbox(
+    loai_gia_list = st.multiselect(
         "Loại giá",
         [
-            "",
-            "Chính hãng",
-            "Không chính hãng"
+        "Chính hãng",
+        "Không chính hãng"
         ]
     )
 
@@ -411,6 +442,10 @@ with tab_pt:
 
     ten_pt = st.text_input(
         "Tên phụ tùng"
+    )
+
+    ten_pt_search = normalize_text(
+    ten_pt
     )
 
     # ------------------
@@ -448,24 +483,33 @@ with tab_pt:
             hang_xe
         )
 
-    if nam_sx:
+    if nam_sx_list:
 
-        sql += """
-        AND [Năm SX] = ?
+        placeholders = ",".join(
+        ["?"] * len(nam_sx_list)
+         )
+
+        sql += f"""
+        AND [Năm SX] IN ({placeholders})
         """
 
-        params.append(
-            int(nam_sx)
+        params.extend(
+        [int(x) for x in nam_sx_list]
+        )   
+
+    if loai_gia_list:
+
+        placeholders = ",".join(
+        ["?"] * len(loai_gia_list)
         )
 
-    if loai_gia:
-
-        sql += """
-        AND [Loại giá] = ?
+        sql += f"""
+        AND [Loại giá]
+        IN ({placeholders})
         """
 
-        params.append(
-            loai_gia
+        params.extend(
+        loai_gia_list
         )
 
     if ten_pt:
@@ -476,7 +520,7 @@ with tab_pt:
         """
 
         params.append(
-            f"%{ten_pt}%"
+            f"%{ten_pt_search}%"
         )
 
     # =====================
@@ -485,17 +529,35 @@ with tab_pt:
 
     if dong_xe_list:
 
+        all_models = pd.read_sql_query(
+            """
+            SELECT DISTINCT [Dòng xe]
+            FROM phutung_master
+            """,
+            conn
+        )["Dòng xe"].dropna().tolist()
+
+        expanded_models = []
+
+        for group in dong_xe_list:
+            expanded_models.extend(
+                expand_model_group(
+                    group,
+                    all_models
+                )
+            )
+
+        expanded_models = list(set(expanded_models))
+
         like_clause = []
 
-        for x in dong_xe_list:
+        for model in expanded_models:
 
             like_clause.append(
-                "[Dòng xe] LIKE ?"
+                "[Dòng xe] = ?"
             )
 
-            params.append(
-                f"%{x}%"
-            )
+            params.append(model)
 
         sql += (
             " AND ("
@@ -528,74 +590,114 @@ with tab_pt:
     # HSBT
     # =====================================
 
-if show_history and ten_pt:
+    if show_history and ten_pt:
 
-    st.divider()
+        st.divider()
+        st.subheader("📋 Lịch sử HSBT")
 
-    st.subheader("📋 Lịch sử HSBT")
+        hist_sql = """
+        SELECT
+            [Số HSBT],
+            [Ngày báo giá],
+            [Hãng xe],
+            [Dòng xe],
+            [Năm SX],
+            [Tên phụ tùng],
+            [Giá duyệt]
+        FROM phutung_raw
+        WHERE 1=1
+        """
 
-    hist_sql = """
-    SELECT
-        [Số HSBT],
-        [Ngày báo giá],
-        [Hãng xe],
-        [Dòng xe],
-        [Năm SX],
-        [Tên phụ tùng],
-        [Giá duyệt]
-    FROM phutung_raw
-    WHERE 1=1
-    """
+        hist_params = []
 
-    hist_params = []
+        if hang_xe:
+            hist_sql += " AND [Hãng xe] = ?"
+            hist_params.append(hang_xe)
 
-    if hang_xe:
-        hist_sql += " AND [Hãng xe] = ?"
-        hist_params.append(hang_xe)
+        if nam_sx_list:
 
-    if nam_sx:
-        hist_sql += " AND [Năm SX] = ?"
-        hist_params.append(int(nam_sx))
+            placeholders = ",".join(
+            ["?"] * len(nam_sx_list)
+            )
 
-    if loai_gia:
-        hist_sql += " AND [Loại giá] = ?"
-        hist_params.append(loai_gia)
+            hist_sql += f"""
+            AND [Năm SX] IN ({placeholders})
+            """
 
-    if ten_pt:
-        hist_sql += " AND [Tên phụ tùng] LIKE ?"
-        hist_params.append(f"%{ten_pt}%")
+            hist_params.extend(
+            [int(x) for x in nam_sx_list]
+            )
 
-    if dong_xe_list:
+        if loai_gia_list:
 
-        like_clause = []
+            placeholders = ",".join(
+            ["?"] * len(loai_gia_list)
+            )
 
-        for x in dong_xe_list:
-            like_clause.append("[Dòng xe] LIKE ?")
-            hist_params.append(f"%{x}%")
+            hist_sql += f"""
+            AND [Loại giá]
+            IN ({placeholders})
+            """
 
-        hist_sql += (
-            " AND ("
-            + " OR ".join(like_clause)
-            + ")"
+            hist_params.extend(
+            loai_gia_list
+            )
+
+        if ten_pt:
+            hist_sql += " AND [Tên phụ tùng chuẩn] LIKE ?"
+            hist_params.append(f"%{ten_pt_search}%")
+
+        if dong_xe_list:
+
+            all_models = pd.read_sql_query(
+                """
+                SELECT DISTINCT [Dòng xe]
+                FROM phutung_master
+                """,
+                conn
+            )["Dòng xe"].dropna().tolist()
+
+            expanded_models = []
+
+            for group in dong_xe_list:
+                expanded_models.extend(
+                    expand_model_group(
+                        group,
+                        all_models
+                    )
+                )
+
+            expanded_models = list(set(expanded_models))
+
+            like_clause = []
+
+            for model in expanded_models:
+                like_clause.append("[Dòng xe] = ?")
+                hist_params.append(model)
+
+            hist_sql += (
+                " AND ("
+                + " OR ".join(like_clause)
+                + ")"
+            )
+
+        hist_sql += """
+        ORDER BY [Giá duyệt] DESC
+        LIMIT 100
+        """
+
+        hist = pd.read_sql_query(
+            hist_sql,
+            conn,
+            params=hist_params
         )
 
-    hist_sql += """
-    ORDER BY [Giá duyệt] DESC
-    LIMIT 100
-    """
-
-    hist = pd.read_sql_query(
-        hist_sql,
-        conn,
-        params=hist_params
-    )
-
-    st.dataframe(
-        format_money(hist),
-        hide_index=True,
-        use_container_width=True,
-        height=350
-    )
+        st.dataframe(
+            format_money(hist),
+            hide_index=True,
+            use_container_width=True,
+            height=350
+        )
 # =========================================
 # TAB SƠN
 # =========================================
@@ -638,7 +740,7 @@ with tab_son:
         dong_xe_options_son = sorted(
             list(
                 {
-                    str(x).split()[0].upper()
+                    get_model_group(x)
                     for x in dong_xe_raw_son["Dòng xe"]
                     if pd.notna(x)
                 }
@@ -665,10 +767,10 @@ with tab_son:
     # Loại giá
     # ------------------
 
-    loai_gia_son = st.selectbox(
+    loai_gia_son_list = st.multiselect(
         "Loại giá",
         [
-            "",
+            
             "Chính hãng",
             "Không chính hãng"
         ],
@@ -683,7 +785,9 @@ with tab_son:
         "Hạng mục",
         key="son_hang_muc"
     )
-
+    hang_muc_search = normalize_text(
+    hang_muc
+    )
     # ------------------
     # HSBT
     # ------------------
@@ -730,14 +834,19 @@ with tab_son:
             tinh
         )
 
-    if loai_gia_son:
+    if loai_gia_son_list:
 
-        sql += """
-        AND [Loại giá] = ?
+        placeholders = ",".join(
+        ["?"] * len(loai_gia_son_list)
+        )
+
+        sql += f"""
+        AND [Loại giá]
+        IN ({placeholders})
         """
 
-        params.append(
-            loai_gia_son
+        params.extend(
+        loai_gia_son_list
         )
 
     if hang_muc:
@@ -747,21 +856,43 @@ with tab_son:
         """
 
         params.append(
-            f"%{hang_muc}%"
+            f"%{hang_muc_search}%"
         )
 
     if dong_xe_list_son:
 
+        all_models = pd.read_sql_query(
+            """
+            SELECT DISTINCT [Dòng xe]
+            FROM son_master
+            """,
+            conn
+        )["Dòng xe"].dropna().tolist()
+
+        expanded_models = []
+
+        for group in dong_xe_list_son:
+            expanded_models.extend(
+                expand_model_group(
+                    group,
+                    all_models
+                )
+            )
+
+        expanded_models = list(
+            set(expanded_models)
+        )
+
         like_clause = []
 
-        for x in dong_xe_list_son:
+        for model in expanded_models:
 
             like_clause.append(
-                "[Dòng xe] LIKE ?"
+                "[Dòng xe] = ?"
             )
 
             params.append(
-                f"%{x}%"
+                model
             )
 
         sql += (
@@ -838,38 +969,65 @@ with tab_son:
                 tinh
             )
 
-        if loai_gia_son:
+        if loai_gia_son_list:
 
-            hist_sql += """
-            AND [Loại giá] = ?
+            placeholders = ",".join(
+            ["?"] * len(loai_gia_son_list)
+            )
+
+            hist_sql += f"""
+            AND [Loại giá]
+            IN ({placeholders})
             """
 
-            hist_params.append(
-                loai_gia_son
+            hist_params.extend(
+            loai_gia_son_list
             )
 
         if hang_muc:
 
             hist_sql += """
-            AND [Hạng mục] LIKE ?
+            AND [Hạng mục chuẩn] LIKE ?
             """
 
             hist_params.append(
-                f"%{hang_muc}%"
+                f"%{hang_muc_search}%"
             )
 
         if dong_xe_list_son:
 
+            all_models = pd.read_sql_query(
+                """
+                SELECT DISTINCT [Dòng xe]
+                FROM son_master
+                """,
+                conn
+            )["Dòng xe"].dropna().tolist()
+
+            expanded_models = []
+
+            for group in dong_xe_list_son:
+                expanded_models.extend(
+                    expand_model_group(
+                        group,
+                        all_models
+                    )
+                )
+
+            expanded_models = list(
+                set(expanded_models)
+            )
+
             like_clause = []
 
-            for x in dong_xe_list_son:
+            for model in expanded_models:
 
                 like_clause.append(
-                    "[Dòng xe] LIKE ?"
+                    "[Dòng xe] = ?"
                 )
 
                 hist_params.append(
-                    f"%{x}%"
+                    model
                 )
 
             hist_sql += (
